@@ -1,0 +1,35 @@
+.entity-logged-trackable {
+    display: flex;
+    flex-flow: column;
+}
+
+.entity-logged-trackable .monospace {
+    font-size: 10pt;
+    font-family: "Roboto", "Menlo", "Consolas", monospace;
+}
+
+.entity-logged-trackable > * {
+    display: flex;
+    flex-flow: row nowrap;
+    margin: 0 0 5px 0;
+}
+
+.entity-logged-trackable > * .label {
+    white-space: nowrap;
+}
+
+.entity-logged-trackable > * .value {
+    margin-left: 10px;
+}
+
+.entity-logged-trackable > * .timestamp {
+    margin-left: 10px;
+}
+
+.entity-logged-trackable .name {
+    font-size: 15pt;
+}
+
+.entity-logged-trackable .mode .poll-interval {
+    margin-left: 10px;
+}

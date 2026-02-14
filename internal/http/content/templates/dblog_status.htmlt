@@ -1,0 +1,32 @@
+<div class="entity-dblog-status">
+    <div class="stats">
+        <div class="status">
+            <div class="label">Status:</div>
+            <div class="value nowrap">{{.Status}}</div>
+        </div>
+        <div class="counters">
+            <div class="label">Success / Failure:</div>
+            <div class="value nowrap">{{.SuccessCount}} / {{.FailureCount}}</div>
+        </div>
+        <div class="retry-queue">
+            <div class="label">Retry Queue Size:</div>
+            <div class="value nowrap">{{.RetryQueueSize}}</div>
+        </div>
+        <div class="last-failure-time">
+            <div class="label">Last Failure:</div>
+            <div class="value nowrap">{{if .LastFailureTime.IsZero}}Never{{else}}{{.LastFailureTime.Format "2006-01-02 3:04:05 PM"}}{{end}}</div>
+        </div>
+        <div class="last-failure-message">
+            <div class="label">Last Error:</div>
+            <div class="value">{{if eq .LastFailureMessage ""}}None{{else}}{{.LastFailureMessage}}{{end}}</div>
+        </div>
+    </div>
+    <div class="driver-info">
+        <div class="label">Driver Name:</div>
+        <div class="value">{{.DriverName}}</div>
+    </div>
+        <div class="data-source">
+        <div class="label">Data Source:</div>
+        <div class="value">{{.DbName}}</div>
+    </div>
+</div>

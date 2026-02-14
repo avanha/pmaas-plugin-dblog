@@ -1,0 +1,39 @@
+.entity-dblog-status {
+    display: flex;
+    flex-flow: column;
+}
+
+.entity-dblog-status > * {
+    display: flex;
+    flex-flow: row nowrap;
+}
+
+.entity-dblog-status .label {
+    white-space: nowrap;
+}
+
+.entity-dblog-status .value {
+    margin-left: 10px;
+}
+
+.entity-dblog-status .nowrap {
+    white-space: nowrap;
+}
+
+.entity-dblog-status .stats {
+    flex-wrap: wrap;
+}
+
+.entity-dblog-status .stats > * {
+    display: flex;
+    flex-flow: row nowrap;
+    margin-right: 15px;
+}
+
+.entity-dblog-status .stats > *:last-child {
+    margin-right: 0;
+}
+
+.entity-dblog-status .data-source .value {
+    font-family: "Roboto", "Menlo", "Consolas", monospace;
+}
