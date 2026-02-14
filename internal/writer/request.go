@@ -1,6 +1,6 @@
 package writer
 
-import "pmaas.io/spi/tracking"
+import "github.com/avanha/pmaas-spi/tracking"
 
 type Request struct {
 	TableOperation

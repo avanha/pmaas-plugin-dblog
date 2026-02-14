@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"pmaas.io/plugins/dblog/entities"
-	"pmaas.io/spi/tracking"
+	"github.com/avanha/pmaas-plugin-dblog/entities"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 type trackableWrapper struct {

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"pmaas.io/plugins/dblog/internal/writer"
-	"pmaas.io/spi/tracking"
+	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 type TestData struct {

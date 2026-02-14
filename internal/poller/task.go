@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"time"
 
-	"pmaas.io/plugins/dblog/internal/common"
-	"pmaas.io/plugins/dblog/internal/writer"
-	"pmaas.io/spi/tracking"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
+	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 type WriteRequestHandlerFunc func(request writer.Request) error

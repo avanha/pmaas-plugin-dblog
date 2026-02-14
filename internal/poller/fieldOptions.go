@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"pmaas.io/plugins/dblog/internal/common"
-	"pmaas.io/plugins/dblog/internal/writer"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
+	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
 )
 
 type fieldOptions struct {

@@ -12,12 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/avanha/pmaas-plugin-dblog/config"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 	"github.com/lib/pq"
-	"pmaas.io/plugins/dblog/internal/common"
 
-	"pmaas.io/plugins/dblog/config"
-
-	commonslices "pmaas.io/common/slices"
+	commonslices "github.com/avanha/pmaas-common/slices"
 )
 
 const allowNotNull = true

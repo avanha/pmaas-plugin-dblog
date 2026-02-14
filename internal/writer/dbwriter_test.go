@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/avanha/pmaas-plugin-dblog/config"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 	"github.com/lib/pq"
-	"pmaas.io/plugins/dblog/config"
-	"pmaas.io/plugins/dblog/internal/common"
 )
 
 type TestData struct {

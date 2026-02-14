@@ -9,9 +9,9 @@ import (
 	"reflect"
 	"sort"
 
-	"pmaas.io/plugins/dblog/entities"
-	"pmaas.io/plugins/dblog/internal/common"
-	"pmaas.io/spi"
+	"github.com/avanha/pmaas-plugin-dblog/entities"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
+	spi "github.com/avanha/pmaas-spi"
 )
 
 //go:embed content/static content/templates

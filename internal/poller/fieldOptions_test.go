@@ -3,7 +3,7 @@ package poller
 import (
 	"testing"
 
-	"pmaas.io/plugins/dblog/internal/writer"
+	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
 )
 
 func TestFieldOptions_parseFieldTag_succeeds(t *testing.T) {

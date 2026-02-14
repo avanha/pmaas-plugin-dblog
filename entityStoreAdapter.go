@@ -3,7 +3,7 @@ package dblog
 import (
 	"fmt"
 
-	"pmaas.io/plugins/dblog/internal/common"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 )
 
 type entityStoreAdapter struct {

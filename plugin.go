@@ -9,15 +9,15 @@ import (
 	"sync"
 	"time"
 
-	config2 "pmaas.io/plugins/dblog/config"
-	"pmaas.io/plugins/dblog/entities"
-	"pmaas.io/plugins/dblog/internal/common"
-	"pmaas.io/plugins/dblog/internal/http"
-	"pmaas.io/plugins/dblog/internal/poller"
-	"pmaas.io/plugins/dblog/internal/writer"
-	"pmaas.io/spi"
-	"pmaas.io/spi/events"
-	"pmaas.io/spi/tracking"
+	config2 "github.com/avanha/pmaas-plugin-dblog/config"
+	"github.com/avanha/pmaas-plugin-dblog/entities"
+	"github.com/avanha/pmaas-plugin-dblog/internal/common"
+	"github.com/avanha/pmaas-plugin-dblog/internal/http"
+	"github.com/avanha/pmaas-plugin-dblog/internal/poller"
+	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
+	"github.com/avanha/pmaas-spi"
+	"github.com/avanha/pmaas-spi/events"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 type stats struct {
