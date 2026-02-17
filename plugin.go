@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	config2 "github.com/avanha/pmaas-plugin-dblog/config"
+	"github.com/avanha/pmaas-plugin-dblog/config"
 	"github.com/avanha/pmaas-plugin-dblog/entities"
 	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 	"github.com/avanha/pmaas-plugin-dblog/internal/http"
@@ -29,7 +29,7 @@ type stats struct {
 }
 
 type plugin struct {
-	config               config2.PluginConfig
+	config               config.PluginConfig
 	container            spi.IPMAASContainer
 	eventReceiverHandles map[string]int
 	entities             map[string]*trackableWrapper
@@ -46,11 +46,15 @@ type plugin struct {
 	stats                stats
 }
 
+func NewPluginConfig() config.PluginConfig {
+	return config.PluginConfig{}
+}
+
 type Plugin interface {
 	spi.IPMAASPlugin2
 }
 
-func NewPlugin(config config2.PluginConfig) Plugin {
+func NewPlugin(config config.PluginConfig) Plugin {
 	fmt.Printf("New, config: %v\n", config)
 	instance := &plugin{
 		config:               config,
