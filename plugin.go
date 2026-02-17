@@ -16,6 +16,7 @@ import (
 	"github.com/avanha/pmaas-plugin-dblog/internal/poller"
 	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
 	"github.com/avanha/pmaas-spi"
+	"github.com/avanha/pmaas-spi/entity"
 	"github.com/avanha/pmaas-spi/events"
 	"github.com/avanha/pmaas-spi/tracking"
 )
@@ -76,8 +77,7 @@ func (p *plugin) Start() {
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 	p.startWriters()
 	p.registerEventHandlers()
-	// TODO: Retrieve the list of possible entities to add to our map.
-	// Without it, we depend on the plugin ordering to ensure we get any devices in existence prior to our registration.
+	p.scanCurrentEntities()
 	p.statusStarted = true
 	p.statusStartupSuccess = p.stats.lastFailureTime.IsZero()
 }
@@ -222,6 +222,26 @@ func (p *plugin) startWriters() {
 	}
 }
 
+func (p *plugin) scanCurrentEntities() {
+	entities, err := p.container.GetEntities(
+		func(info *entity.RegisteredEntityInfo) bool {
+			return info.StubFactoryFn != nil && info.EntityType.AssignableTo(tracking.TrackableType)
+		})
+
+	if err != nil {
+		fmt.Printf("Unable to scan registered entities: %v", err)
+		return
+	}
+
+	for _, entity := range entities {
+		err := p.processEntity(entity.Id, entity.StubFactoryFn)
+
+		if err != nil {
+			fmt.Printf("Unable to process entity %s: %v", entity.Id, err)
+		}
+	}
+}
+
 func (p *plugin) registerEventHandlers() {
 	var handle int
 	var err error
@@ -291,29 +311,34 @@ func (p *plugin) onEntityRegisteredPredicate(eventInfo *events.EventInfo) bool {
 func (p *plugin) onEntityRegistered(eventInfo *events.EventInfo) error {
 	fmt.Printf("%T onEntityRegistered(%v)\n", p, eventInfo)
 	event := eventInfo.Event.(events.EntityRegisteredEvent)
-	_, ok := p.entities[event.Id]
+
+	return p.processEntity(event.Id, event.StubFactoryFn)
+}
+
+func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error)) error {
+	_, ok := p.entities[entityId]
 
 	if ok {
-		fmt.Printf("Entity %s already tracked\n", event.Id)
+		fmt.Printf("Entity %s already tracked\n", entityId)
 		return nil
 	}
 
-	if event.StubFactoryFn == nil {
-		fmt.Printf("Entity %s has no stub factory\n", event.Id)
+	if stubFactoryFn == nil {
+		fmt.Printf("Entity %s has no stub factory\n", entityId)
 		return nil
 	}
 
-	entityStub, err := event.StubFactoryFn()
+	entityStub, err := stubFactoryFn()
 
 	if err != nil {
-		return fmt.Errorf("unable to create stub for entity %s: %w", event.Id, err)
+		return fmt.Errorf("unable to create stub for entity %s: %w", entityId, err)
 	}
 
 	entity := entityStub.(tracking.Trackable)
 	trackingConfig := entity.TrackingConfig()
 
 	if trackingConfig.TrackingMode == 0 {
-		fmt.Printf("Entity %s has not enabled tracking\n", event.Id)
+		fmt.Printf("Entity %s has not enabled tracking\n", entityId)
 		return nil
 	}
 
@@ -321,10 +346,10 @@ func (p *plugin) onEntityRegistered(eventInfo *events.EventInfo) error {
 		trackable:        entity,
 		registrationTime: time.Now(),
 		trackingConfig:   trackingConfig,
-		id:               event.Id,
+		id:               entityId,
 		name:             trackingConfig.Name,
 	}
-	p.entities[event.Id] = wrapped
+	p.entities[entityId] = wrapped
 
 	switch trackingConfig.TrackingMode {
 	case tracking.ModePoll:
