@@ -3,10 +3,10 @@ package dblog
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/avanha/pmaas-plugin-dblog/config"
@@ -45,6 +45,7 @@ type plugin struct {
 	statusStartupSuccess bool
 	statusDbDown         bool
 	stats                stats
+	activeWriters        atomic.Int32
 }
 
 func NewPluginConfig() config.PluginConfig {
@@ -185,13 +186,13 @@ func (p *plugin) startWriters() {
 	// Allow pollers to submit requests to the writer without blocking.
 	// Polling should generally occur less frequently, and the writer should
 	// be able to keep up.
-	writeRequestCh := make(chan writer.Request, 50)
+	p.writeRequestCh = make(chan writer.Request, 20)
 	connectionFactoryFn := func() (db *sql.DB, err error) {
 		fmt.Printf("dblog.DbWriter connecting to %s database: %s\n", p.config.DriverName, p.config.DataSourceName)
 		return sql.Open(p.config.DriverName, p.config.DataSourceName)
 	}
 	writerStatsTracker := &writerStatsTrackerAdapter{parent: p}
-	task := writer.CreateDbWriter(p.ctx, p.config, connectionFactoryFn, writeRequestCh, writerStatsTracker)
+	task := writer.CreateDbWriter(p.ctx, p.config, connectionFactoryFn, p.writeRequestCh, writerStatsTracker)
 	initErrorCh := make(chan error)
 	p.writers.Go(func() {
 		err := task.Init()
@@ -203,6 +204,8 @@ func (p *plugin) startWriters() {
 		close(initErrorCh)
 
 		if err == nil {
+			p.activeWriters.Add(1)
+			defer p.activeWriters.Add(-1)
 			task.Run()
 		}
 	})
@@ -212,7 +215,6 @@ func (p *plugin) startWriters() {
 
 	if err == nil {
 		fmt.Printf("%T DbWriter started\n", p)
-		p.writeRequestCh = writeRequestCh
 	} else {
 		message := fmt.Sprintf("Failed to start DbWriter: %v", err)
 		p.statusDbDown = true
@@ -353,6 +355,10 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 
 	switch trackingConfig.TrackingMode {
 	case tracking.ModePoll:
+		if p.activeWriters.Load() == 0 {
+			return fmt.Errorf("unable to start poller for entity %s: no active writer(s)", entityId)
+		}
+
 		statsTrackerAdapter := &pollerStatsTrackerAdapter{
 			parent:        p,
 			entityWrapper: wrapped,
@@ -403,26 +409,6 @@ func (p *plugin) onEntityDeregistered(eventInfo *events.EventInfo) error {
 }
 
 func (p *plugin) pollerWriteRequestHandlerFn(request writer.Request) error {
-	errorCh := make(chan error)
-
-	err := p.container.EnqueueOnPluginGoRoutine(func() {
-		errorCh <- p.submitWriteRequest(request)
-		close(errorCh)
-	})
-
-	if err != nil {
-		close(errorCh)
-		return err
-	}
-
-	return <-errorCh
-}
-
-func (p *plugin) submitWriteRequest(request writer.Request) error {
-	if p.writeRequestCh == nil {
-		return errors.New("write request channel not initialized")
-	}
-
 	p.writeRequestCh <- request
 
 	return nil
