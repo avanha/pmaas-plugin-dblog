@@ -507,8 +507,9 @@ func interpretDataType(dataType string) (int, error) {
 	case "bigint":
 		return DataTypeBigInt, nil
 	case "integer":
-
 		return DataTypeInt, nil
+	case "double precision":
+		return DataTypeBigDecimal, nil
 	case "character varying":
 		return DataTypeVarChar, nil
 	case "timestamp with time zone":
