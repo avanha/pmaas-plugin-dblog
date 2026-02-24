@@ -504,10 +504,12 @@ func (w *DbWriter) tableContainsAllColumns(
 
 func interpretDataType(dataType string) (int, error) {
 	switch dataType {
-	case "bigint":
-		return DataTypeBigInt, nil
 	case "integer":
 		return DataTypeInt, nil
+	case "bigint":
+		return DataTypeBigInt, nil
+	case "real":
+		return DataTypeDecimal, nil
 	case "double precision":
 		return DataTypeBigDecimal, nil
 	case "character varying":
