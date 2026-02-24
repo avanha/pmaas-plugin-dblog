@@ -185,7 +185,7 @@ func (p *plugin) startWriters() {
 	// Allow pollers to submit requests to the writer without blocking.
 	// Polling should generally occur less frequently, and the writer should
 	// be able to keep up.
-	writeRequestCh := make(chan writer.Request, 10)
+	writeRequestCh := make(chan writer.Request, 50)
 	connectionFactoryFn := func() (db *sql.DB, err error) {
 		fmt.Printf("dblog.DbWriter connecting to %s database: %s\n", p.config.DriverName, p.config.DataSourceName)
 		return sql.Open(p.config.DriverName, p.config.DataSourceName)
