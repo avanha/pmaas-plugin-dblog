@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/avanha/pmaas-common/queue"
 	"github.com/avanha/pmaas-plugin-dblog/config"
 	"github.com/avanha/pmaas-plugin-dblog/entities"
 	"github.com/avanha/pmaas-plugin-dblog/internal/common"
@@ -37,15 +37,14 @@ type plugin struct {
 	pollers              sync.WaitGroup
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	writers              sync.WaitGroup
-	writeRequestCh       chan writer.Request
+	writersWg            sync.WaitGroup
+	writeRequestQueue    *queue.RequestQueue[writer.Request]
 	stopEvents           chan func()
 	httpHandler          *http.Handler
 	statusStarted        bool
 	statusStartupSuccess bool
 	statusDbDown         bool
 	stats                stats
-	activeWriters        atomic.Int32
 }
 
 func NewPluginConfig() config.PluginConfig {
@@ -149,30 +148,25 @@ func sanitizeDataSource(dataSource string) string {
 }
 
 func (p *plugin) onPollerGoRoutinesStopped() {
-	fmt.Printf("%T Poller goroutines stopped, deregistering entities...\n", p)
+	fmt.Printf("%T Poller goroutines stopped, deregistering event handlers...\n", p)
 	p.deregisterEventHandlers()
-	// TODO: Clear our map of entities
+	clear(p.entities)
 
-	if p.writeRequestCh == nil {
+	if p.writeRequestQueue == nil {
+		// There is no request queue if writer go routines can't start.
 		p.onStopComplete()
 		return
 	}
 
-	fmt.Printf("%T Stopping writer(s)...\n", p)
-
-	close(p.writeRequestCh)
-	p.writeRequestCh = nil
+	// Stopping the request queue will also stop the writers
+	fmt.Printf("%T Stopping writers...\n", p)
+	p.writeRequestQueue.Stop()
 
 	go func() {
 		fmt.Printf("%T Waiting for writers...\n", p)
-		p.writers.Wait()
-		p.stopEvents <- p.onWriterGoRoutinesStopped
+		p.writersWg.Wait()
+		p.stopEvents <- p.onStopComplete
 	}()
-}
-
-func (p *plugin) onWriterGoRoutinesStopped() {
-	fmt.Printf("%T Writer goroutines stopped\n", p)
-	p.onStopComplete()
 }
 
 func (p *plugin) onStopComplete() {
@@ -182,19 +176,20 @@ func (p *plugin) onStopComplete() {
 }
 
 func (p *plugin) startWriters() {
-	p.writers = sync.WaitGroup{}
 	// Allow pollers to submit requests to the writer without blocking.
 	// Polling should generally occur less frequently, and the writer should
-	// be able to keep up.
-	p.writeRequestCh = make(chan writer.Request, 20)
+	// be able to keep up.  The bufferring is provided via the writeRequestQueue which feeds the
+	// unbuffered writeRequestCh channel.
+	writeRequestCh := make(chan writer.Request)
 	connectionFactoryFn := func() (db *sql.DB, err error) {
-		fmt.Printf("dblog.DbWriter connecting to %s database: %s\n", p.config.DriverName, p.config.DataSourceName)
+		fmt.Printf("dblog.DbWriter connecting to %s database: %s\n",
+			p.config.DriverName, p.config.DataSourceName)
 		return sql.Open(p.config.DriverName, p.config.DataSourceName)
 	}
 	writerStatsTracker := &writerStatsTrackerAdapter{parent: p}
-	task := writer.CreateDbWriter(p.ctx, p.config, connectionFactoryFn, p.writeRequestCh, writerStatsTracker)
+	task := writer.CreateDbWriter(p.ctx, p.config, connectionFactoryFn, writeRequestCh, writerStatsTracker)
 	initErrorCh := make(chan error)
-	p.writers.Go(func() {
+	p.writersWg.Go(func() {
 		err := task.Init()
 
 		if err != nil {
@@ -204,8 +199,6 @@ func (p *plugin) startWriters() {
 		close(initErrorCh)
 
 		if err == nil {
-			p.activeWriters.Add(1)
-			defer p.activeWriters.Add(-1)
 			task.Run()
 		}
 	})
@@ -213,15 +206,20 @@ func (p *plugin) startWriters() {
 	// Wait for initialization to complete
 	err := <-initErrorCh
 
-	if err == nil {
-		fmt.Printf("%T DbWriter started\n", p)
-	} else {
+	if err != nil {
 		message := fmt.Sprintf("Failed to start DbWriter: %v", err)
+		close(writeRequestCh)
 		p.statusDbDown = true
 		p.stats.lastFailureTime = time.Now()
 		p.stats.lastFailureMessage = message
 		fmt.Printf("%T %s\n", p, message)
+
+		return
 	}
+
+	fmt.Printf("%T DbWriter started\n", p)
+	p.writeRequestQueue = queue.NewRequestQueue(writeRequestCh)
+	p.writersWg.Go(p.writeRequestQueue.Run)
 }
 
 func (p *plugin) scanCurrentEntities() {
@@ -355,8 +353,10 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 
 	switch trackingConfig.TrackingMode {
 	case tracking.ModePoll:
-		if p.activeWriters.Load() == 0 {
-			return fmt.Errorf("unable to start poller for entity %s: no active writer(s)", entityId)
+		if p.writeRequestQueue == nil {
+			return fmt.Errorf(
+				"unable to start poller for entity %s: write request queue not available",
+				entityId)
 		}
 
 		statsTrackerAdapter := &pollerStatsTrackerAdapter{
@@ -409,7 +409,13 @@ func (p *plugin) onEntityDeregistered(eventInfo *events.EventInfo) error {
 }
 
 func (p *plugin) pollerWriteRequestHandlerFn(request writer.Request) error {
-	p.writeRequestCh <- request
+	if p.writeRequestQueue == nil {
+		return fmt.Errorf("unable to enqueue write request, writeRequestQueue is nil")
+	}
+
+	if err := p.writeRequestQueue.Enqueue(&request); err != nil {
+		return fmt.Errorf("unable to enqueue write request: %w", err)
+	}
 
 	return nil
 }
