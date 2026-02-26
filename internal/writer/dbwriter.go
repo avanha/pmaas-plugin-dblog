@@ -489,10 +489,9 @@ func (w *DbWriter) tableContainsAllColumns(
 
 		if requiredColumn.column.DataType != existingColumn.dataType {
 			return nil, fmt.Errorf(
-				"column %s has different data type in the existing table: expected %s, got %s",
+				"column %s has different data type in the existing table: expected %s, got %d",
 				requiredColumn.column.Name,
 				requiredColumn.declaration,
-
 				existingColumn.dataType)
 		}
 

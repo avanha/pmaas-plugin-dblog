@@ -115,10 +115,10 @@ func setup(t *testing.T) *dbWriterTestState {
 		},
 		tableContext: &TableContext{
 			tableName: "mockTable",
-			columns: []Column{
-				{Name: "int_value", DataType: DataTypeInt, Nullable: false, Mode: common.FieldModeAlways},
-				{Name: "string_value", DataType: DataTypeVarChar, Nullable: true, Mode: common.FieldModeAlways},
-				{Name: "on_change_string_value", DataType: DataTypeVarChar, Nullable: true, Mode: common.FieldModeOnChange},
+			columns: []columnWithDeclaration{
+				{declaration: "", dataTypeMismatch: false, column: Column{Name: "int_value", DataType: DataTypeInt, Nullable: false, Mode: common.FieldModeAlways}},
+				{declaration: "", dataTypeMismatch: false, column: Column{Name: "string_value", DataType: DataTypeVarChar, Nullable: true, Mode: common.FieldModeAlways}},
+				{declaration: "", dataTypeMismatch: false, column: Column{Name: "on_change_string_value", DataType: DataTypeVarChar, Nullable: true, Mode: common.FieldModeOnChange}},
 			},
 			insertStatement:    insertStatement,
 			fields:             ReflectFields(t, &testData, "Int32Value", "StringValue", "OnChangeStringValue"),
