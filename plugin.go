@@ -52,7 +52,7 @@ func NewPluginConfig() config.PluginConfig {
 }
 
 type Plugin interface {
-	spi.IPMAASPlugin2
+	spi.IPMAASPlugin
 }
 
 func NewPlugin(config config.PluginConfig) Plugin {
@@ -82,11 +82,7 @@ func (p *plugin) Start() {
 	p.statusStartupSuccess = p.stats.lastFailureTime.IsZero()
 }
 
-func (p *plugin) Stop() {
-
-}
-
-func (p *plugin) StopAsync() chan func() {
+func (p *plugin) Stop() chan func() {
 	fmt.Printf("%T Stopping...\n", p)
 	p.cancel()
 
@@ -98,6 +94,7 @@ func (p *plugin) StopAsync() chan func() {
 		p.pollers.Wait()
 		p.stopEvents <- p.onPollerGoRoutinesStopped
 	}()
+
 	return p.stopEvents
 }
 
