@@ -399,7 +399,11 @@ func (p *plugin) onEntityDeregistered(eventInfo *events.EventInfo) error {
 		return nil
 	}
 
-	wrapped.pollTaskCancelFn()
+	if wrapped.pollTaskCancelFn != nil {
+		fmt.Printf("Entity %s has a nil pollTaskCancelFn")
+		wrapped.pollTaskCancelFn()
+	}
+
 	delete(p.entities, event.Id)
 
 	return nil
