@@ -1,10 +1,12 @@
 package common
 
-import "github.com/avanha/pmaas-plugin-dblog/entities"
+import (
+	"github.com/avanha/pmaas-plugin-dblog/data"
+)
 
 type StatusAndEntities struct {
-	Status   entities.StatusEntity
-	Entities []entities.LoggedTrackableEntity
+	Status   data.PluginStatus
+	Entities []data.LoggedTrackableEntity
 }
 
 type EntityStore interface {

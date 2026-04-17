@@ -10,10 +10,10 @@ import (
 
 	"github.com/avanha/pmaas-common/queue"
 	"github.com/avanha/pmaas-plugin-dblog/config"
-	"github.com/avanha/pmaas-plugin-dblog/entities"
+	"github.com/avanha/pmaas-plugin-dblog/data"
 	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 	"github.com/avanha/pmaas-plugin-dblog/internal/http"
-	"github.com/avanha/pmaas-plugin-dblog/internal/poller"
+	"github.com/avanha/pmaas-plugin-dblog/internal/trackableWrapper"
 	"github.com/avanha/pmaas-plugin-dblog/internal/writer"
 	"github.com/avanha/pmaas-spi"
 	"github.com/avanha/pmaas-spi/entity"
@@ -33,10 +33,10 @@ type plugin struct {
 	config               config.PluginConfig
 	container            spi.IPMAASContainer
 	eventReceiverHandles map[string]int
-	entities             map[string]*trackableWrapper
+	entities             map[string]*trackableWrapper.TrackableWrapper
 	pollers              sync.WaitGroup
 	ctx                  context.Context
-	cancel               context.CancelFunc
+	cancelFn             context.CancelFunc
 	writersWg            sync.WaitGroup
 	writeRequestQueue    *queue.RequestQueue[writer.Request]
 	stopEvents           chan func()
@@ -60,7 +60,7 @@ func NewPlugin(config config.PluginConfig) Plugin {
 	instance := &plugin{
 		config:               config,
 		eventReceiverHandles: make(map[string]int),
-		entities:             make(map[string]*trackableWrapper),
+		entities:             make(map[string]*trackableWrapper.TrackableWrapper),
 		httpHandler:          http.NewHandler(),
 	}
 
@@ -74,7 +74,7 @@ func (p *plugin) Init(container spi.IPMAASContainer) {
 
 func (p *plugin) Start() {
 	p.pollers = sync.WaitGroup{}
-	p.ctx, p.cancel = context.WithCancel(context.Background())
+	p.ctx, p.cancelFn = context.WithCancel(context.Background())
 	p.startWriters()
 	p.registerEventHandlers()
 	p.scanCurrentEntities()
@@ -84,7 +84,15 @@ func (p *plugin) Start() {
 
 func (p *plugin) Stop() chan func() {
 	fmt.Printf("%T Stopping...\n", p)
-	p.cancel()
+
+	// Cancels the context which will stop db writers
+	p.cancelFn()
+
+	// Cancel the polling task on an entity, and close its stub
+	for _, wrappedEntity := range p.entities {
+		wrappedEntity.CancelPollTask()
+		wrappedEntity.CloseStubIfPresent()
+	}
 
 	// We don't want to block on the pluginRunner goroutine, so start a new goroutine to wait
 	// on the WaitGroup and issue a callback once that's done.
@@ -101,14 +109,14 @@ func (p *plugin) Stop() chan func() {
 // getStatusAndEntities retrieves the plugin status and a list of currently registered trackable entities.
 // It does not perform any synchronization, so it should only be called from the plugin's main GoRoutine.
 func (p *plugin) getStatusAndEntities() common.StatusAndEntities {
-	trackables := make([]entities.LoggedTrackableEntity, len(p.entities))
+	trackables := make([]data.LoggedTrackableEntity, len(p.entities))
 	i := 0
-	for _, entity := range p.entities {
-		trackables[i] = entity.toLoggedTrackableEntity()
+	for _, wrapped := range p.entities {
+		trackables[i] = wrapped.ToLoggedTrackableEntity()
 		i++
 	}
 	return common.StatusAndEntities{
-		Status: entities.StatusEntity{
+		Status: data.PluginStatus{
 			DriverName:         p.config.DriverName,
 			DbName:             sanitizeDataSource(p.config.DataSourceName),
 			Status:             p.calculateStatus(),
@@ -331,21 +339,16 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 		return fmt.Errorf("unable to create stub for entity %s: %w", entityId, err)
 	}
 
-	entity := entityStub.(tracking.Trackable)
-	trackingConfig := entity.TrackingConfig()
+	trackableEntity := entityStub.(tracking.Trackable)
+	trackingConfig := trackableEntity.TrackingConfig()
 
 	if trackingConfig.TrackingMode == 0 {
 		fmt.Printf("Entity %s has not enabled tracking\n", entityId)
 		return nil
 	}
 
-	wrapped := &trackableWrapper{
-		trackable:        entity,
-		registrationTime: time.Now(),
-		trackingConfig:   trackingConfig,
-		id:               entityId,
-		name:             trackingConfig.Name,
-	}
+	wrapped := trackableWrapper.NewTrackableWrapper(p.container, p.pollerWriteRequestHandlerFn, trackableEntity,
+		trackingConfig, entityId, trackingConfig.Name)
 	p.entities[entityId] = wrapped
 
 	switch trackingConfig.TrackingMode {
@@ -355,21 +358,19 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 				"unable to start poller for entity %s: write request queue not available",
 				entityId)
 		}
-
-		statsTrackerAdapter := &pollerStatsTrackerAdapter{
-			parent:        p,
-			entityWrapper: wrapped,
-		}
-		taskCtx, pollTaskCancelFn := context.WithCancel(p.ctx)
-		wrapped.pollTaskCancelFn = pollTaskCancelFn
-		task := poller.NewTask(taskCtx, entity, trackingConfig, p.pollerWriteRequestHandlerFn, statsTrackerAdapter)
-		p.pollers.Go(task.Run)
+		p.pollers.Go(wrapped.Poll)
 		break
 	case tracking.ModePush:
 		// TODO: Register a broadcast receiver for the entity
 		break
 	default:
 		fmt.Printf("Unsupported tracking mode: %v\n", trackingConfig.TrackingMode)
+	}
+
+	historyAwareEntity, isHistoryAwareTrackable := entityStub.(tracking.HistoryAwareTrackable)
+
+	if isHistoryAwareTrackable {
+		historyAwareEntity.SetHistoryRepo(wrapped.GetStub())
 	}
 
 	return nil
@@ -399,10 +400,8 @@ func (p *plugin) onEntityDeregistered(eventInfo *events.EventInfo) error {
 		return nil
 	}
 
-	if wrapped.pollTaskCancelFn != nil {
-		fmt.Printf("Entity %s has a nil pollTaskCancelFn")
-		wrapped.pollTaskCancelFn()
-	}
+	wrapped.CancelPollTask()
+	wrapped.CloseStubIfPresent()
 
 	delete(p.entities, event.Id)
 

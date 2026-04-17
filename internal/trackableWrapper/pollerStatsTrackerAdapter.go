@@ -1,17 +1,21 @@
-package dblog
+package trackableWrapper
 
 import (
 	"fmt"
 	"time"
+
+	spi "github.com/avanha/pmaas-spi"
 )
 
-type pollerStatsTrackerAdapter struct {
-	parent        *plugin
-	entityWrapper *trackableWrapper
+// PollerStatsTrackerAdapter allows a poller task, executing in a different goroutine, to update
+// stats on the TrackableWrapper instance.
+type PollerStatsTrackerAdapter struct {
+	container     spi.IPMAASContainer
+	entityWrapper *TrackableWrapper
 }
 
-func (p pollerStatsTrackerAdapter) ReportPollResult(pollTime time.Time, dataInsertAttempted bool, dataInsertQueuedForRetry bool, dataInsertErrorMessage string) {
-	err := p.parent.container.EnqueueOnPluginGoRoutine(func() {
+func (p PollerStatsTrackerAdapter) ReportPollResult(pollTime time.Time, dataInsertAttempted bool, dataInsertQueuedForRetry bool, dataInsertErrorMessage string) {
+	err := p.container.EnqueueOnPluginGoRoutine(func() {
 		p.entityWrapper.pollCount++
 		p.entityWrapper.lastPollTime = pollTime
 
@@ -38,8 +42,8 @@ func (p pollerStatsTrackerAdapter) ReportPollResult(pollTime time.Time, dataInse
 
 }
 
-func (p pollerStatsTrackerAdapter) ReportFieldCount(fieldCount int) {
-	err := p.parent.container.EnqueueOnPluginGoRoutine(func() {
+func (p PollerStatsTrackerAdapter) ReportFieldCount(fieldCount int) {
+	err := p.container.EnqueueOnPluginGoRoutine(func() {
 		p.entityWrapper.fieldCount = fieldCount
 	})
 
@@ -48,8 +52,8 @@ func (p pollerStatsTrackerAdapter) ReportFieldCount(fieldCount int) {
 	}
 }
 
-func (p pollerStatsTrackerAdapter) ReportStatus(statusDescription string) {
-	err := p.parent.container.EnqueueOnPluginGoRoutine(func() {
+func (p PollerStatsTrackerAdapter) ReportStatus(statusDescription string) {
+	err := p.container.EnqueueOnPluginGoRoutine(func() {
 		p.entityWrapper.status = statusDescription
 	})
 
@@ -58,8 +62,8 @@ func (p pollerStatsTrackerAdapter) ReportStatus(statusDescription string) {
 	}
 }
 
-func (p pollerStatsTrackerAdapter) ReportStatusWithError(statusDescription string, errorMessage string) {
-	err := p.parent.container.EnqueueOnPluginGoRoutine(func() {
+func (p PollerStatsTrackerAdapter) ReportStatusWithError(statusDescription string, errorMessage string) {
+	err := p.container.EnqueueOnPluginGoRoutine(func() {
 		p.entityWrapper.status = statusDescription
 		p.entityWrapper.failureCount++
 		p.entityWrapper.lastFailureTime = time.Now()

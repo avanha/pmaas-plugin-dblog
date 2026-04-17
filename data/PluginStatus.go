@@ -1,8 +1,8 @@
-package entities
+package data
 
 import "time"
 
-type StatusEntity struct {
+type PluginStatus struct {
 	DriverName         string
 	DbName             string
 	Status             string

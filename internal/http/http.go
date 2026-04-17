@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/avanha/pmaas-plugin-dblog/entities"
+	"github.com/avanha/pmaas-plugin-dblog/data"
 	"github.com/avanha/pmaas-plugin-dblog/internal/common"
 	spi "github.com/avanha/pmaas-spi"
 )
@@ -45,10 +45,10 @@ func (h *Handler) Init(container spi.IPMAASContainer, entityStore common.EntityS
 	container.EnableStaticContent("static")
 	container.AddRoute("/plugins/dblog/", h.handleHttpListRequest)
 	container.RegisterEntityRenderer(
-		reflect.TypeOf((*entities.StatusEntity)(nil)).Elem(),
+		reflect.TypeOf((*data.PluginStatus)(nil)).Elem(),
 		h.statusEntityRendererFactory)
 	container.RegisterEntityRenderer(
-		reflect.TypeOf((*entities.LoggedTrackableEntity)(nil)).Elem(),
+		reflect.TypeOf((*data.LoggedTrackableEntity)(nil)).Elem(),
 		h.loggedTrackableEntityRendererFactory)
 }
 
@@ -69,7 +69,7 @@ func (h *Handler) handleHttpListRequest(writer http.ResponseWriter, request *htt
 	}
 
 	sort.Slice(entityPointers, func(i, j int) bool {
-		return entityPointers[i].(*entities.LoggedTrackableEntity).Name < entityPointers[j].(*entities.LoggedTrackableEntity).Name
+		return entityPointers[i].(*data.LoggedTrackableEntity).Name < entityPointers[j].(*data.LoggedTrackableEntity).Name
 	})
 
 	h.container.RenderList(
@@ -92,7 +92,7 @@ func (h *Handler) statusEntityRendererFactory() (spi.EntityRenderer, error) {
 
 	// Declare a function that casts the entity to the expected type and evaluates it via the template loaded above
 	renderer := func(w io.Writer, entity any) error {
-		status, ok := entity.(*entities.StatusEntity)
+		status, ok := entity.(*data.PluginStatus)
 
 		if !ok {
 			return errors.New("item is not an instance of *StatusEntity")
@@ -124,7 +124,7 @@ func (h *Handler) loggedTrackableEntityRendererFactory() (spi.EntityRenderer, er
 
 	// Declare a function that casts the entity to the expected type and evaluates it via the template loaded above
 	renderer := func(w io.Writer, entity any) error {
-		loggedTrackable, ok := entity.(*entities.LoggedTrackableEntity)
+		loggedTrackable, ok := entity.(*data.LoggedTrackableEntity)
 
 		if !ok {
 			return errors.New("item is not an instance of *LoggedTrackableEntity")

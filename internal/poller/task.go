@@ -26,8 +26,8 @@ type Task struct {
 
 func NewTask(ctx context.Context, target tracking.Trackable, trackingConfig tracking.Config,
 	writeRequestHandlerFun WriteRequestHandlerFunc,
-	tracker common.PollerStatsTracker) Task {
-	return Task{
+	tracker common.PollerStatsTracker) *Task {
+	return &Task{
 		ctx:                   ctx,
 		target:                target,
 		initialDelaySeconds:   30,
