@@ -2,6 +2,7 @@ package trackableWrapper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -155,11 +156,17 @@ func (w *TrackableWrapper) ToLoggedTrackableEntity() data.LoggedTrackableEntity 
 	}
 }
 
-func (w *TrackableWrapper) GetHistory() <-chan any {
-	result := make(chan any)
-	close(result)
+func (w *TrackableWrapper) GetHistory() tracking.ResultOrError[<-chan tracking.DataSample] {
+	return tracking.ResultOrError[<-chan tracking.DataSample]{
+		Error: errors.New("not implemented"),
+	}
+}
 
-	return result
+func (w *TrackableWrapper) GetMostRecentSample() tracking.ResultOrError[tracking.DataSample] {
+	return tracking.ResultOrError[tracking.DataSample]{
+		Error:  errors.New("not implemented"),
+		Result: tracking.DataSample{},
+	}
 }
 
 func getTrackingModeDescription(trackingMode int) string {

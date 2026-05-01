@@ -238,11 +238,11 @@ func (p *plugin) scanCurrentEntities() {
 		return
 	}
 
-	for _, entity := range entities {
-		err := p.processEntity(entity.Id, entity.StubFactoryFn)
+	for _, e := range entities {
+		err := p.processEntity(e.Id, e.StubFactoryFn)
 
 		if err != nil {
-			fmt.Printf("Unable to process entity %s: %v", entity.Id, err)
+			fmt.Printf("Unable to process entity %s: %v", e.Id, err)
 		}
 	}
 }
@@ -354,11 +354,13 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 	switch trackingConfig.TrackingMode {
 	case tracking.ModePoll:
 		if p.writeRequestQueue == nil {
-			return fmt.Errorf(
-				"unable to start poller for entity %s: write request queue not available",
+			fmt.Printf(
+				"Unable to start poller for entity %s, because the write request queue not available.",
 				entityId)
+		} else {
+			p.pollers.Go(wrapped.Poll)
 		}
-		p.pollers.Go(wrapped.Poll)
+
 		break
 	case tracking.ModePush:
 		// TODO: Register a broadcast receiver for the entity
@@ -370,7 +372,9 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 	historyAwareEntity, isHistoryAwareTrackable := entityStub.(tracking.HistoryAwareTrackable)
 
 	if isHistoryAwareTrackable {
-		historyAwareEntity.SetHistoryRepo(wrapped.GetStub())
+		if err = historyAwareEntity.SetHistoryRepo(wrapped.GetStub()); err != nil {
+			fmt.Printf("Unable to set provider history repo to entity %s: %v\n", entityId, err)
+		}
 	}
 
 	return nil

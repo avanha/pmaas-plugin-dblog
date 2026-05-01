@@ -6,6 +6,7 @@ import (
 
 	"github.com/avanha/pmaas-plugin-dblog/entities"
 	spicommon "github.com/avanha/pmaas-spi/common"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 type Stub struct {
@@ -47,8 +48,18 @@ func (s *Stub) Close() {
 	}
 }
 
-func (s *Stub) GetHistory() <-chan any {
+func (s *Stub) GetHistory() tracking.ResultOrError[<-chan tracking.DataSample] {
 	return spicommon.ThreadSafeEntityWrapperExecValueFunc(
 		s.entityWrapperReference.Load(),
-		func(target entities.TrackableEntityWrapper) <-chan any { return target.GetHistory() })
+		func(target entities.TrackableEntityWrapper) tracking.ResultOrError[<-chan tracking.DataSample] {
+			return target.GetHistory()
+		})
+}
+
+func (s *Stub) GetMostRecentSample() tracking.ResultOrError[tracking.DataSample] {
+	return spicommon.ThreadSafeEntityWrapperExecValueFunc(
+		s.entityWrapperReference.Load(),
+		func(target entities.TrackableEntityWrapper) tracking.ResultOrError[tracking.DataSample] {
+			return target.GetMostRecentSample()
+		})
 }
