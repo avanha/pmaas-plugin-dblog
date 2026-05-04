@@ -88,7 +88,7 @@ func (p *plugin) Stop() chan func() {
 	// Cancels the context which will stop db writers
 	p.cancelFn()
 
-	// Cancel the polling task on an entity, and close its stub
+	// Cancel the polling task on an entity and close its stub
 	for _, wrappedEntity := range p.entities {
 		wrappedEntity.CancelPollTask()
 		wrappedEntity.CloseStubIfPresent()
@@ -183,7 +183,7 @@ func (p *plugin) onStopComplete() {
 func (p *plugin) startWriters() {
 	// Allow pollers to submit requests to the writer without blocking.
 	// Polling should generally occur less frequently, and the writer should
-	// be able to keep up.  The bufferring is provided via the writeRequestQueue which feeds the
+	// be able to keep up.  The buffering is provided via the writeRequestQueue, which feeds the
 	// unbuffered writeRequestCh channel.
 	writeRequestCh := make(chan writer.Request)
 	connectionFactoryFn := func() (db *sql.DB, err error) {
