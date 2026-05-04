@@ -67,6 +67,10 @@ func NewPlugin(config config.PluginConfig) Plugin {
 	return instance
 }
 
+func (p *plugin) ShortName() string {
+	return "dblog"
+}
+
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.container = container
 	p.httpHandler.Init(container, &entityStoreAdapter{parent: p})
