@@ -2,15 +2,15 @@
     <div class="stats">
         <div class="status">
             <div class="label">Status:</div>
-            <div class="value nowrap">{{.Status}}</div>
+            <div class="value nowrap">{{.Status | html}}</div>
         </div>
         <div class="counters">
             <div class="label">Success / Failure:</div>
-            <div class="value nowrap">{{.SuccessCount}} / {{.FailureCount}}</div>
+            <div class="value nowrap">{{.SuccessCount | html}} / {{.FailureCount | html}}</div>
         </div>
         <div class="retry-queue">
             <div class="label">Retry Queue Size:</div>
-            <div class="value nowrap">{{.RetryQueueSize}}</div>
+            <div class="value nowrap">{{.RetryQueueSize | html}}</div>
         </div>
         <div class="last-failure-time">
             <div class="label">Last Failure:</div>
@@ -18,15 +18,15 @@
         </div>
         <div class="last-failure-message">
             <div class="label">Last Error:</div>
-            <div class="value">{{if eq .LastFailureMessage ""}}None{{else}}{{.LastFailureMessage}}{{end}}</div>
+            <div class="value">{{if eq .LastFailureMessage ""}}None{{else}}{{.LastFailureMessage | html}}{{end}}</div>
         </div>
     </div>
     <div class="driver-info">
         <div class="label">Driver Name:</div>
-        <div class="value">{{.DriverName}}</div>
+        <div class="value">{{.DriverName | html}}</div>
     </div>
         <div class="data-source">
         <div class="label">Data Source:</div>
-        <div class="value">{{.DbName}}</div>
+        <div class="value">{{.DbName | html}}</div>
     </div>
 </div>

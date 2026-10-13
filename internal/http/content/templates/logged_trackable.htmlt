@@ -1,41 +1,41 @@
 <div class="entity-logged-trackable">
-    <div class="name">{{.Name}}</div>
-    <div class="id monospace">{{.Id}}</div>
+    <div class="name">{{.Name | html}}</div>
+    <div class="id monospace">{{.Id | html}}</div>
     <div class="status">
         <div class="label">Status</div>
-        <div class="value">{{.Status}}</div>
+        <div class="value">{{.Status | html}}</div>
     </div>
     <div class="poll-count">
          <div class="label">Poll Count</div>
-         <div class="value">{{.PollCount}}</div>
+         <div class="value">{{.PollCount | html}}</div>
          {{if not .LastPollTime.IsZero}}
             <div class="timestamp">{{.LastPollTime.Format "2006-01-02 3:04:05 PM"}}</div>
          {{end}}
     </div>
     <div class="success-count">
          <div class="label">Success Count</div>
-         <div class="value">{{.SuccessCount}}</div>
+         <div class="value">{{.SuccessCount | html}}</div>
          {{if not .LastSuccessTime.IsZero}}
             <div class="timestamp">{{.LastSuccessTime.Format "2006-01-02 3:04:05 PM"}}</div>
          {{end}}
     </div>
     <div class="soft-failure-count">
         <div class="label">Soft Failures</div>
-        <div class="value">{{.SoftFailureCount}}</div>
+        <div class="value">{{.SoftFailureCount | html}}</div>
         {{if not .LastSoftFailureTime.IsZero}}
             <div class="timestamp">{{.LastSoftFailureTime.Format "2006-01-02 3:04:05 PM"}}</div>
         {{end}}
     </div>
     <div class="failure-count">
         <div class="label">Failures</div>
-        <div class="value">{{.FailureCount}}</div>
+        <div class="value">{{.FailureCount | html}}</div>
         {{if not .LastFailureTime.IsZero}}
            <div class="timestamp">{{.LastFailureTime.Format "2006-01-02 3:04:05 PM"}}</div>
         {{end}}
     </div>
     <div class="last-failure">
         <div class="label">Last Failure</div>
-        <div class="value">{{if eq .LastFailureErrorMessage ""}}None{{else}}{{.LastFailureErrorMessage}}{{end}}</div>
+        <div class="value">{{if eq .LastFailureErrorMessage ""}}None{{else}}{{.LastFailureErrorMessage | html}}{{end}}</div>
     </div>
     <div class="registration-time">
         <div class="label">Registration Time:</div>
@@ -43,18 +43,18 @@
     </div>
     <div class="mode">
         <div class="label">Mode:</div>
-        <div class="value">{{.TrackingMode}}</div>
+        <div class="value">{{.TrackingMode | html}}</div>
         {{if eq .TrackingMode "Polling"}}
-            <div class="poll-interval">({{.PollIntervalSeconds}}s)</div>
+            <div class="poll-interval">({{.PollIntervalSeconds | html}}s)</div>
        {{end}}
     </div>
     <div class="data-source">
         <div class="label">Data Source:</div>
-        <div class="value monospace">{{.DataSource}}</div>
+        <div class="value monospace">{{.DataSource | html}}</div>
     </div>
     <div class="field-count">
             <div class="label">Fields:</div>
-            <div class="value">{{.FieldCount}}</div>
+            <div class="value">{{.FieldCount | html}}</div>
         </div>
     <div class="arg-strategy">
             <div class="label">Argument Strategy:</div>
