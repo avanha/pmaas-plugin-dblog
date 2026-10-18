@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 type WriteRequestHandlerFunc func(request writer.Request) error
 type Task struct {
+	log                   *slog.Logger
 	ctx                   context.Context
 	target                tracking.Trackable
 	trackingConfig        tracking.Config
@@ -24,10 +26,11 @@ type Task struct {
 	statsTracker          common.PollerStatsTracker
 }
 
-func NewTask(ctx context.Context, target tracking.Trackable, trackingConfig tracking.Config,
+func NewTask(log *slog.Logger, ctx context.Context, target tracking.Trackable, trackingConfig tracking.Config,
 	writeRequestHandlerFun WriteRequestHandlerFunc,
 	tracker common.PollerStatsTracker) *Task {
 	return &Task{
+		log:                   log,
 		ctx:                   ctx,
 		target:                target,
 		initialDelaySeconds:   30,
@@ -51,7 +54,7 @@ func (t *Task) Run() {
 		} else {
 			message := fmt.Sprintf("poller [%s]: Unable to ensure storage, stopping: %v", t.targetName, err)
 			t.statsTracker.ReportStatusWithError("Failed", message)
-			fmt.Printf("%s\n", message)
+			t.log.Error("unable to ensure storage, stopping", "entity", t.targetName, "error", err)
 			run = false
 		}
 	}
@@ -66,7 +69,7 @@ func (t *Task) Run() {
 		}
 	}
 
-	fmt.Printf("poller [%s]: Terminated\n", t.targetName)
+	t.log.Debug("terminated", "entity", t.targetName)
 	t.statsTracker.ReportStatus("Terminated")
 }
 
@@ -208,7 +211,7 @@ func (t *Task) getColumnType(fieldType reflect.Type, fieldOptions *fieldOptions)
 }
 
 func (t *Task) poll() {
-	fmt.Printf("poller [%s]: Polling\n", t.targetName)
+	t.log.Debug("polling", "entity", t.targetName)
 	now := time.Now()
 	dataSample := t.target.Data()
 	dataInsertAttempted := false
@@ -216,9 +219,9 @@ func (t *Task) poll() {
 	dataInsertErrorMessage := ""
 
 	if dataSample.LastUpdateTime.IsZero() {
-		fmt.Printf("poller [%s]: Received data with a zero update time\n", t.targetName)
+		t.log.Debug("received data with a zero update time", "entity", t.targetName)
 	} else {
-		fmt.Printf("poller [%s]: Received: %+v\n", t.targetName, dataSample.Data)
+		t.log.Debug("received data", "entity", t.targetName, "data", dataSample.Data)
 		dataInsertAttempted = true
 		responseCh := make(chan writer.Response, 1)
 		err := t.writeRequestHandlerFn(
@@ -235,7 +238,7 @@ func (t *Task) poll() {
 			close(responseCh)
 			dataInsertErrorMessage = fmt.Sprintf("Error scheduling data insert request: %v", err)
 			t.statsTracker.ReportPollResult(now, dataInsertAttempted, false, dataInsertErrorMessage)
-			fmt.Printf("poller [%s]: %s\n", t.targetName, dataInsertErrorMessage)
+			t.log.Error("error scheduling data insert request", "entity", t.targetName, "error", err)
 
 			return
 		}
@@ -244,9 +247,9 @@ func (t *Task) poll() {
 
 		if response.Error != nil {
 			dataInsertErrorMessage = fmt.Sprintf("Error inserting data: %v", err)
-			fmt.Printf("poller [%s]: Error inserting data: %v\n", t.targetName, response.Error)
+			t.log.Error("error inserting data", "entity", t.targetName, "error", response.Error)
 		} else {
-			fmt.Printf("poller [%s]: Data inserted\n", t.targetName)
+			t.log.Debug("data inserted", "entity", t.targetName)
 			dataInsertQueuedForRetry = response.QueuedForRetry
 		}
 	}

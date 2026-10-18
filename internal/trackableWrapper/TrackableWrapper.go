@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/avanha/pmaas-plugin-dblog/data"
@@ -15,6 +16,7 @@ import (
 )
 
 type TrackableWrapper struct {
+	log                     *slog.Logger
 	container               spi.IPMAASContainer
 	trackable               tracking.Trackable
 	pollTaskCancelFn        context.CancelFunc
@@ -38,6 +40,7 @@ type TrackableWrapper struct {
 }
 
 func NewTrackableWrapper(
+	log *slog.Logger,
 	container spi.IPMAASContainer,
 	writeRequestHandlerFn poller.WriteRequestHandlerFunc,
 	trackable tracking.Trackable,
@@ -46,6 +49,7 @@ func NewTrackableWrapper(
 	name string,
 ) *TrackableWrapper {
 	return &TrackableWrapper{
+		log:                   log,
 		container:             container,
 		trackable:             trackable,
 		trackingConfig:        trackingConfig,
@@ -67,8 +71,7 @@ func (w *TrackableWrapper) Poll() {
 	})
 
 	if err != nil {
-		fmt.Printf("TrackableWrapper[%s]: Unable to enqueue initPoll on plugin goroutine: %v\n",
-			w.name, err)
+		w.log.Error("unable to enqueue initPoll on plugin goroutine", "entity", w.name, "error", err)
 		return
 	}
 
@@ -94,12 +97,12 @@ func (w *TrackableWrapper) initPoll() *poller.Task {
 	taskCtx, pollTaskCancelFn := context.WithCancel(context.Background())
 	w.pollTaskCancelFn = pollTaskCancelFn
 
-	return poller.NewTask(taskCtx, w.trackable, w.trackingConfig, w.writeRequestHandlerFn, statsTrackerAdapter)
+	return poller.NewTask(w.log, taskCtx, w.trackable, w.trackingConfig, w.writeRequestHandlerFn, statsTrackerAdapter)
 }
 
 func (w *TrackableWrapper) CancelPollTask() {
 	if w.pollTaskCancelFn == nil {
-		fmt.Printf("TrackableWrapper[%s]: No poll task is running\n", w.name)
+		w.log.Debug("no poll task is running", "entity", w.name)
 		return
 	}
 
@@ -114,7 +117,7 @@ func (w *TrackableWrapper) CancelPollTask() {
 // it's only called from the plugin goroutine, whether directly or via the PMAAS server.
 func (t *TrackableWrapper) GetStub() entities.TrackableEntityWrapper {
 	if t.stub == nil {
-		t.stub = NewStub(
+		t.stub = NewStub(t.log,
 			t.name,
 			&spicommon.ThreadSafeEntityWrapper[entities.TrackableEntityWrapper]{
 				Container: t.container,

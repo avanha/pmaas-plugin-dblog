@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/avanha/pmaas-spi/logging"
+	"log/slog"
 	"regexp"
 	"sync"
 	"time"
@@ -30,6 +32,7 @@ type stats struct {
 }
 
 type plugin struct {
+	log                  *slog.Logger
 	config               config.PluginConfig
 	container            spi.IPMAASContainer
 	eventReceiverHandles map[string]int
@@ -56,7 +59,6 @@ type Plugin interface {
 }
 
 func NewPlugin(config config.PluginConfig) Plugin {
-	fmt.Printf("New, config: %v\n", config)
 	instance := &plugin{
 		config:               config,
 		eventReceiverHandles: make(map[string]int),
@@ -73,6 +75,7 @@ func (p *plugin) ShortName() string {
 
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.container = container
+	p.log = logging.For(container)
 	p.httpHandler.Init(container, &entityStoreAdapter{parent: p})
 }
 
@@ -87,7 +90,7 @@ func (p *plugin) Start() {
 }
 
 func (p *plugin) Stop() chan func() {
-	fmt.Printf("%T Stopping...\n", p)
+	p.log.Info("stopping")
 
 	// Cancels the context which will stop db writers
 	p.cancelFn()
@@ -102,7 +105,7 @@ func (p *plugin) Stop() chan func() {
 	// on the WaitGroup and issue a callback once that's done.
 	p.stopEvents = make(chan func())
 	go func() {
-		fmt.Printf("%T Waiting for pollers...\n", p)
+		p.log.Debug("waiting for pollers")
 		p.pollers.Wait()
 		p.stopEvents <- p.onPollerGoRoutinesStopped
 	}()
@@ -157,7 +160,7 @@ func sanitizeDataSource(dataSource string) string {
 }
 
 func (p *plugin) onPollerGoRoutinesStopped() {
-	fmt.Printf("%T Poller goroutines stopped, deregistering event handlers...\n", p)
+	p.log.Debug("poller goroutines stopped, deregistering event handlers")
 	p.deregisterEventHandlers()
 	clear(p.entities)
 
@@ -168,18 +171,18 @@ func (p *plugin) onPollerGoRoutinesStopped() {
 	}
 
 	// Stopping the request queue will also stop the writers
-	fmt.Printf("%T Stopping writers...\n", p)
+	p.log.Debug("stopping writers")
 	p.writeRequestQueue.Stop()
 
 	go func() {
-		fmt.Printf("%T Waiting for writers...\n", p)
+		p.log.Debug("waiting for writers")
 		p.writersWg.Wait()
 		p.stopEvents <- p.onStopComplete
 	}()
 }
 
 func (p *plugin) onStopComplete() {
-	fmt.Printf("%T Stopped\n", p)
+	p.log.Info("stopped")
 	close(p.stopEvents)
 	p.stopEvents = nil
 }
@@ -191,12 +194,11 @@ func (p *plugin) startWriters() {
 	// unbuffered writeRequestCh channel.
 	writeRequestCh := make(chan writer.Request)
 	connectionFactoryFn := func() (db *sql.DB, err error) {
-		fmt.Printf("dblog.DbWriter connecting to %s database: %s\n",
-			p.config.DriverName, p.config.DataSourceName)
+		p.log.Info("connecting to database", "driver", p.config.DriverName, "dataSource", sanitizeDataSource(p.config.DataSourceName))
 		return sql.Open(p.config.DriverName, p.config.DataSourceName)
 	}
 	writerStatsTracker := &writerStatsTrackerAdapter{parent: p}
-	task := writer.CreateDbWriter(p.ctx, p.config, connectionFactoryFn, writeRequestCh, writerStatsTracker)
+	task := writer.CreateDbWriter(logging.For(p.container, "writer"), p.ctx, p.config, connectionFactoryFn, writeRequestCh, writerStatsTracker)
 	initErrorCh := make(chan error)
 	p.writersWg.Go(func() {
 		err := task.Init()
@@ -221,12 +223,12 @@ func (p *plugin) startWriters() {
 		p.statusDbDown = true
 		p.stats.lastFailureTime = time.Now()
 		p.stats.lastFailureMessage = message
-		fmt.Printf("%T %s\n", p, message)
+		p.log.Error("failed to start the DbWriter", "error", err)
 
 		return
 	}
 
-	fmt.Printf("%T DbWriter started\n", p)
+	p.log.Info("DbWriter started")
 	p.writeRequestQueue = queue.NewRequestQueue(writeRequestCh)
 	p.writersWg.Go(p.writeRequestQueue.Run)
 }
@@ -238,7 +240,7 @@ func (p *plugin) scanCurrentEntities() {
 		})
 
 	if err != nil {
-		fmt.Printf("Unable to scan registered entities: %v", err)
+		p.log.Error("unable to scan registered entities", "error", err)
 		return
 	}
 
@@ -246,7 +248,7 @@ func (p *plugin) scanCurrentEntities() {
 		err := p.processEntity(e.Id, e.StubFactoryFn)
 
 		if err != nil {
-			fmt.Printf("Unable to process entity %s: %v", e.Id, err)
+			p.log.Error("unable to process entity", "entity", e.Id, "error", err)
 		}
 	}
 }
@@ -287,7 +289,7 @@ func (p *plugin) deregisterEventHandlers() {
 		if err == nil {
 			deregisteredEvents = append(deregisteredEvents, eventName)
 		} else {
-			fmt.Printf("Unable to deregister handler for event %s: %v", eventName, err)
+			p.log.Error("unable to deregister event handler", "event", eventName, "error", err)
 		}
 	}
 
@@ -298,8 +300,7 @@ func (p *plugin) deregisterEventHandlers() {
 	registrationCount := len(p.eventReceiverHandles)
 
 	if registrationCount > 0 {
-		fmt.Printf("Unable to deregister all event handlers, %d remaining: %v",
-			registrationCount, p.eventReceiverHandles)
+		p.log.Error("unable to deregister all event handlers", "remaining", registrationCount, "handles", p.eventReceiverHandles)
 	}
 }
 
@@ -318,7 +319,7 @@ func (p *plugin) onEntityRegisteredPredicate(eventInfo *events.EventInfo) bool {
 }
 
 func (p *plugin) onEntityRegistered(eventInfo *events.EventInfo) error {
-	fmt.Printf("%T onEntityRegistered(%v)\n", p, eventInfo)
+	p.log.Debug("entity registered", "event", eventInfo)
 	event := eventInfo.Event.(events.EntityRegisteredEvent)
 
 	return p.processEntity(event.Id, event.StubFactoryFn)
@@ -328,12 +329,12 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 	_, ok := p.entities[entityId]
 
 	if ok {
-		fmt.Printf("Entity %s already tracked\n", entityId)
+		p.log.Debug("entity already tracked", "entity", entityId)
 		return nil
 	}
 
 	if stubFactoryFn == nil {
-		fmt.Printf("Entity %s has no stub factory\n", entityId)
+		p.log.Debug("entity has no stub factory", "entity", entityId)
 		return nil
 	}
 
@@ -347,20 +348,18 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 	trackingConfig := trackableEntity.TrackingConfig()
 
 	if trackingConfig.TrackingMode == 0 {
-		fmt.Printf("Entity %s has not enabled tracking\n", entityId)
+		p.log.Debug("entity has not enabled tracking", "entity", entityId)
 		return nil
 	}
 
-	wrapped := trackableWrapper.NewTrackableWrapper(p.container, p.pollerWriteRequestHandlerFn, trackableEntity,
+	wrapped := trackableWrapper.NewTrackableWrapper(logging.For(p.container, "poller"), p.container, p.pollerWriteRequestHandlerFn, trackableEntity,
 		trackingConfig, entityId, trackingConfig.Name)
 	p.entities[entityId] = wrapped
 
 	switch trackingConfig.TrackingMode {
 	case tracking.ModePoll:
 		if p.writeRequestQueue == nil {
-			fmt.Printf(
-				"Unable to start poller for entity %s, because the write request queue not available.",
-				entityId)
+			p.log.Warn("unable to start poller for entity, because the write request queue is not available", "entity", entityId)
 		} else {
 			p.pollers.Go(wrapped.Poll)
 		}
@@ -370,14 +369,14 @@ func (p *plugin) processEntity(entityId string, stubFactoryFn func() (any, error
 		// TODO: Register a broadcast receiver for the entity
 		break
 	default:
-		fmt.Printf("Unsupported tracking mode: %v\n", trackingConfig.TrackingMode)
+		p.log.Error("unsupported tracking mode", "mode", trackingConfig.TrackingMode)
 	}
 
 	historyAwareEntity, isHistoryAwareTrackable := entityStub.(tracking.HistoryAwareTrackable)
 
 	if isHistoryAwareTrackable {
 		if err = historyAwareEntity.SetHistoryRepo(wrapped.GetStub()); err != nil {
-			fmt.Printf("Unable to set provider history repo to entity %s: %v\n", entityId, err)
+			p.log.Error("unable to set provider history repo to entity", "entity", entityId, "error", err)
 		}
 	}
 
@@ -399,12 +398,12 @@ func (p *plugin) onEntityDeregisteredPredicate(eventInfo *events.EventInfo) bool
 }
 
 func (p *plugin) onEntityDeregistered(eventInfo *events.EventInfo) error {
-	fmt.Printf("%T onEntityDeregistered(%v)\n", p, eventInfo)
+	p.log.Debug("entity deregistered", "event", eventInfo)
 	event := eventInfo.Event.(events.EntityDeregisteredEvent)
 	wrapped, ok := p.entities[event.Id]
 
 	if !ok {
-		fmt.Printf("Entity %s not tracked\n", event.Id)
+		p.log.Debug("entity not tracked", "entity", event.Id)
 		return nil
 	}
 

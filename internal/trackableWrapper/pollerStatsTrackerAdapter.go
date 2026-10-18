@@ -1,7 +1,6 @@
 package trackableWrapper
 
 import (
-	"fmt"
 	"time"
 
 	spi "github.com/avanha/pmaas-spi"
@@ -37,7 +36,7 @@ func (p PollerStatsTrackerAdapter) ReportPollResult(pollTime time.Time, dataInse
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.pollerStatsTrackerAdapter: Unable to report poll result: %v\n", err)
+		p.entityWrapper.log.Warn("unable to report poll result", "error", err)
 	}
 
 }
@@ -48,7 +47,7 @@ func (p PollerStatsTrackerAdapter) ReportFieldCount(fieldCount int) {
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.pollerStatsTrackerAdapter: Unable to report field count update: %v\n", err)
+		p.entityWrapper.log.Warn("unable to report field count update", "error", err)
 	}
 }
 
@@ -58,7 +57,7 @@ func (p PollerStatsTrackerAdapter) ReportStatus(statusDescription string) {
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.pollerStatsTrackerAdapter: Unable to report status update: %v\n", err)
+		p.entityWrapper.log.Warn("unable to report status update", "error", err)
 	}
 }
 
@@ -71,6 +70,6 @@ func (p PollerStatsTrackerAdapter) ReportStatusWithError(statusDescription strin
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.pollerStatsTrackerAdapter: Unable to report status update: %v\n", err)
+		p.entityWrapper.log.Warn("unable to report status update", "error", err)
 	}
 }

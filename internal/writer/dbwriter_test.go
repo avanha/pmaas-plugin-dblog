@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"log/slog"
 	"net"
 	"reflect"
 	"regexp"
@@ -140,7 +141,7 @@ func setup(t *testing.T) *dbWriterTestState {
 	}
 
 	state.requestCh = make(chan Request)
-	state.dbWriter = CreateDbWriter(context.Background(), *state.config, connectionFactoryFn, state.requestCh, state)
+	state.dbWriter = CreateDbWriter(slog.New(slog.DiscardHandler), context.Background(), *state.config, connectionFactoryFn, state.requestCh, state)
 
 	initErrorCh := make(chan error)
 	state.dbWriterDoneCh = make(chan bool)

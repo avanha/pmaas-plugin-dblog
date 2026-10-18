@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 const allowNotNull = true
 
 type DbWriter struct {
+	log                     *slog.Logger
 	ctx                     context.Context
 	config                  config.PluginConfig
 	connectionFactoryFn     func() (*sql.DB, error)
@@ -44,12 +46,14 @@ type columnWithDeclaration struct {
 }
 
 func CreateDbWriter(
+	log *slog.Logger,
 	ctx context.Context,
 	pluginConfig config.PluginConfig,
 	connectionFactoryFn func() (*sql.DB, error),
 	requestCh chan Request,
 	statsTracker common.WriterStatsTracker) *DbWriter {
 	return &DbWriter{
+		log:                 log,
 		ctx:                 ctx,
 		config:              pluginConfig,
 		connectionFactoryFn: connectionFactoryFn,
@@ -89,9 +93,9 @@ RequestProcessing:
 	err := w.close()
 
 	if err == nil {
-		fmt.Printf("DbWriter terminated successfully\n")
+		w.log.Info("terminated successfully")
 	} else {
-		fmt.Printf("DbWriter terminating with error: %v\n", err)
+		w.log.Error("terminating with error", "error", err)
 	}
 }
 
@@ -141,11 +145,11 @@ func (w *DbWriter) checkConnection() {
 		err := w.db.PingContext(w.ctx)
 
 		if err != nil {
-			fmt.Printf("DbWriter connection still down: %v\n", err)
+			w.log.Warn("connection still down", "error", err)
 			return
 		}
 
-		fmt.Printf("DbWriter connection reestablished\n")
+		w.log.Info("connection reestablished")
 		w.connectionHealthy = true
 	}
 
@@ -163,7 +167,7 @@ func (w *DbWriter) processRetryQueue() bool {
 		return true
 	}
 
-	fmt.Printf("DbWriter retrying %d request(s)\n", oldCount)
+	w.log.Info("retrying requests", "count", oldCount)
 
 	connectionHealthy, queue, i := w.processRetryQueueSnapshot()
 
@@ -171,14 +175,13 @@ func (w *DbWriter) processRetryQueue() bool {
 		// If any requests failed and enqueued for retry, despite ending the run with a healthy connection,
 		// it's possible the requests failed due to a missing table that was re-created at a later point in the
 		// run.  Run through the retry queue one more time.
-		fmt.Printf("DbWriter %d request(s) re-enqueued during retry run, retrying immediately\n",
-			len(w.retryQueue))
+		w.log.Info("requests re-enqueued during retry run, retrying immediately", "count", len(w.retryQueue))
 
 		connectionHealthy, queue, i = w.processRetryQueueSnapshot()
 	}
 
 	if !connectionHealthy {
-		fmt.Printf("DbWriter connection lost while processing retry queue\n")
+		w.log.Warn("connection lost while processing retry queue")
 	}
 
 	if i < len(queue) {
@@ -188,8 +191,7 @@ func (w *DbWriter) processRetryQueue() bool {
 
 	newCount := len(w.retryQueue)
 
-	fmt.Printf("DbWriter successfully processed %d of %d request(s) from the retry queue\n",
-		oldCount-newCount, oldCount)
+	w.log.Info("processed requests from the retry queue", "processed", oldCount-newCount, "of", oldCount)
 
 	if oldCount != newCount {
 		w.statsTracker.UpdateRetryQueueSize(newCount)
@@ -220,12 +222,12 @@ func (w *DbWriter) processRequestAndMaybeRetryQueue(request *Request) {
 		if connectionHealthy {
 			// No change in state: was healthy and is still healthy
 		} else {
-			fmt.Printf("DbWriter connection lost while processing request\n")
+			w.log.Warn("connection lost while processing request")
 			w.connectionHealthy = false
 		}
 	} else {
 		if connectionHealthy {
-			fmt.Printf("DbWriter connection found to be healthy while processing request\n")
+			w.log.Info("connection found to be healthy while processing request")
 			w.connectionHealthy = true
 			w.connectionHealthy = w.processRetryQueue()
 		} else {
@@ -256,7 +258,7 @@ func (w *DbWriter) processRequest(request *Request) bool {
 			// the retry queue details from the caller.
 			requestForRetry := *request
 			requestForRetry.ResponseCh = nil
-			fmt.Printf("DbWriter %s failed, enqueueing for retry: %v\n", requestForRetry.Describe(), retryableError)
+			w.log.Warn("request failed, enqueueing for retry", "request", requestForRetry.Describe(), "error", retryableError)
 			w.retryQueue = append(w.retryQueue, requestForRetry)
 			queuedForRetry = true
 			reportedError = nil
@@ -388,7 +390,7 @@ func (w *DbWriter) tableExists(tableName string, dbStatus *dbConnectionStatus) (
 		err := rows.Close()
 
 		if err != nil {
-			fmt.Printf("Error closing tables cursor: %v\n", err)
+			w.log.Error("error closing tables cursor", "error", err)
 		}
 	}()
 
@@ -432,7 +434,7 @@ func (w *DbWriter) tableContainsAllColumns(
 		err := rows.Close()
 
 		if err != nil {
-			fmt.Printf("Error closing column cursor: %v\n", err)
+			w.log.Error("error closing column cursor", "error", err)
 		}
 	}()
 
@@ -548,7 +550,7 @@ func (w *DbWriter) addTableColumns(tableContext *TableContext, tableName string,
 				return fmt.Sprintf("%s %s", cwd.column.Name, cwd.declaration)
 			}),
 		", ")
-	fmt.Printf("Altering table %s adding columns %+v\n", tableName, missingColumnDescription)
+	w.log.Info("altering table, adding columns", "table", tableName, "columns", missingColumnDescription)
 
 	columns := ""
 
@@ -567,7 +569,7 @@ func (w *DbWriter) addTableColumns(tableContext *TableContext, tableName string,
 	}
 
 	ddl := fmt.Sprintf("ALTER TABLE %s\n%s;", tableName, columns)
-	fmt.Printf("Adding columns to table %s, DDL: %s\n", tableName, ddl)
+	w.log.Debug("adding columns to table", "table", tableName, "ddl", ddl)
 	// Implement, PostgreSQL syntax:
 	// ALTER TABLE table_name
 	// ADD COLUMN new_column_name data_type [constraint];
@@ -619,7 +621,7 @@ func (w *DbWriter) calculateHasOnChangeColumns(columns []Column) bool {
 }
 
 func (w *DbWriter) createTable(tableName string, columns []Column, dbStatus *dbConnectionStatus) error {
-	fmt.Printf("Creating table %s with %+v\n", tableName, columns)
+	w.log.Info("creating table", "table", tableName, "columns", columns)
 	tableColumns := "\tid BIGSERIAL PRIMARY KEY"
 
 	for _, column := range columns {
@@ -664,7 +666,7 @@ func (w *DbWriter) processInsertDataOperation(operation *InsertDataOperation,
 			err := stmt.Close()
 
 			if err != nil {
-				fmt.Printf("Error closing preprared statement: %v\n", err)
+				w.log.Error("error closing prepared statement", "error", err)
 			}
 		}
 
@@ -672,7 +674,7 @@ func (w *DbWriter) processInsertDataOperation(operation *InsertDataOperation,
 			err := tx.Rollback()
 
 			if err != nil {
-				fmt.Printf("Error rolling back transaction: %v\n", err)
+				w.log.Error("error rolling back transaction", "error", err)
 			}
 		}
 	}()
@@ -706,7 +708,7 @@ func (w *DbWriter) processInsertDataOperation(operation *InsertDataOperation,
 	stmt = nil
 
 	if closeErr != nil {
-		fmt.Printf("Error closing preprared statement: %v\n", closeErr)
+		w.log.Error("error closing prepared statement", "error", closeErr)
 	}
 
 	if err != nil {

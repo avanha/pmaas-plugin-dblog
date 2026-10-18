@@ -1,7 +1,5 @@
 package dblog
 
-import "fmt"
-
 type writerStatsTrackerAdapter struct {
 	parent *plugin
 }
@@ -10,7 +8,7 @@ func (w *writerStatsTrackerAdapter) ReportSuccess(retryQueueSize int) {
 	err := w.parent.container.EnqueueOnPluginGoRoutine(func() { w.parent.onDbWriterSuccess(retryQueueSize) })
 
 	if err != nil {
-		fmt.Printf("dblog.writerStatsTrackerAdapter: Unable to report success: %v\n", err)
+		w.parent.log.Warn("unable to report success", "error", err)
 	}
 }
 
@@ -20,7 +18,7 @@ func (w *writerStatsTrackerAdapter) ReportFailure(cause error, retryQueueSize in
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.writerStatsTrackerAdapter: Unable to report failure: %v\n", err)
+		w.parent.log.Warn("unable to report failure", "error", err)
 	}
 }
 
@@ -30,6 +28,6 @@ func (w *writerStatsTrackerAdapter) UpdateRetryQueueSize(retryQueueSize int) {
 	})
 
 	if err != nil {
-		fmt.Printf("dblog.writerStatsTrackerAdapter: Unable to report retry queue size update: %v\n", err)
+		w.parent.log.Warn("unable to report retry queue size update", "error", err)
 	}
 }

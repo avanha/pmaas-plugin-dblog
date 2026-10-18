@@ -2,6 +2,7 @@ package trackableWrapper
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/avanha/pmaas-plugin-dblog/entities"
@@ -10,13 +11,15 @@ import (
 )
 
 type Stub struct {
+	log                    *slog.Logger
 	name                   string
 	closeFn                func() error
 	entityWrapperReference atomic.Pointer[spicommon.ThreadSafeEntityWrapper[entities.TrackableEntityWrapper]]
 }
 
-func NewStub(name string, entityWrapper *spicommon.ThreadSafeEntityWrapper[entities.TrackableEntityWrapper]) *Stub {
+func NewStub(log *slog.Logger, name string, entityWrapper *spicommon.ThreadSafeEntityWrapper[entities.TrackableEntityWrapper]) *Stub {
 	stub := &Stub{
+		log:  log,
 		name: name,
 	}
 
@@ -44,7 +47,7 @@ func (s *Stub) Close() {
 	err := closeFn()
 
 	if err != nil {
-		fmt.Printf("Failed to close Stub %s: %v", s.name, err)
+		s.log.Error("failed to close stub", "name", s.name, "error", err)
 	}
 }
 
