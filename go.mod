@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/avanha/pmaas-common v0.0.3
-	github.com/avanha/pmaas-spi v0.0.8
+	github.com/avanha/pmaas-common v0.0.5
+	github.com/avanha/pmaas-spi v0.0.14
 	github.com/lib/pq v1.10.9
 )
